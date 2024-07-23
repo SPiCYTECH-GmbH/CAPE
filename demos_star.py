@@ -1,14 +1,16 @@
 import numpy as np
 import os
 import smplx
+import star
 import torch
 import trimesh
 from os.path import join, exists
 from lib.utils import filter_cloth_pose
+from pathlib import Path
 
-class demo_full(object):
+class demo_full:
     def __init__(self, model, name, gender, dataset, data_dir, datadir_root, n_sample, save_obj,
-                 smpl_model_folder='body_models', random_seed=123, vis=True, mesh_path=None, results_dir=None):
+                 smpl_model_folder="body_models", random_seed=123, vis=True, mesh_path=None, results_dir=None):
         self.n_sample = n_sample
         self.name = name
         self.data_dir = data_dir
@@ -19,32 +21,37 @@ class demo_full(object):
         self.vis = vis
 
         from psbody.mesh import Mesh
-        self.smpl_model = smplx.body_models.create(model_type='smpl',
+        self.smpl_model = smplx.body_models.create(model_type="smpl",
                                                    model_path=smpl_model_folder,
                                                    gender=gender)
+        # if gender == "male":
+        #     self.smpl_model = star.STAR(gender=gender, model_path=Path("/home/mindq/Downloads/STAR_MALE.npz"), num_betas=60)
+        # elif gender == "female":
+        #     self.smpl_model = star.STAR(gender=gender, model_path=Path("/home/mindq/Downloads/STAR_FEMALE. npz"), num_betas=60)
+        # else:
+        #     raise ValueError("Gender should be male or female!")
 
-        self.clo_type_readable = np.array(['shortlong', 'shortshort', 'longshort', 'longlong'])
+        self.clo_type_readable = np.array(["shortlong", "shortshort", "longshort", "longlong"])
 
         script_dir = os.path.dirname(os.path.realpath(__file__))
-        self.clothing_verts_idx = np.load(join(script_dir, 'data', 'clothing_verts_idx.npy'))
-        # TODO different mesh
+        self.clothing_verts_idx = np.load(join(script_dir, "data", "clothing_verts_idx.npy"))
         print("---------------------------------------------------------")
         print("demo_full mesh_path:", mesh_path)
         print("---------------------------------------------------------")
         if mesh_path:
             self.ref_mesh = Mesh(filename=mesh_path)
         else:
-            self.ref_mesh = Mesh(filename=join(script_dir, 'data', 'template_mesh.obj'))
+            self.ref_mesh = Mesh(filename=join(script_dir, "data", "template_mesh.obj"))
             
-        self.vpe = np.load(os.path.join(script_dir, 'data', 'edges_smpl.npy'))  # vertex per edge
+        self.vpe = np.load(os.path.join(script_dir, "data", "edges_smpl.npy"))  # vertex per edge
         self.minimal_shape = self.ref_mesh.v
         # print(self.minimal_shape.shape)
         # exit(1)
 
-        self.rot = np.load(join(script_dir, 'data', 'demo_data', 'demo_pose_params.npz'))['rot'] # 216 dim pose vector
+        self.rot = np.load(join(script_dir, "data", "demo_data", "demo_pose_params.npz"))["rot"] # 216 dim pose vector
         # self.pose = np.load(join(script_dir, 'data', 'demo_data', 'demo_pose_params.npz'))['pose']
         
-        pose = np.zeros((69))
+        pose = np.zeros(69)
         pose[1] = 0.1
         pose[2] = 0.2
         pose[4] = -0.1
@@ -60,40 +67,40 @@ class demo_full(object):
         pose = np.concatenate((np.zeros(3), pose))
         self.pose = np.tile(pose, (6,1))
 
-        train_stats = np.load(join(script_dir, 'data', 'demo_data', 'trainset_stats.npz'))
-        self.train_mean = train_stats['mean']
-        self.train_std = train_stats['std']
+        train_stats = np.load(join(script_dir, "data", "demo_data", "trainset_stats.npz"))
+        self.train_mean = train_stats["mean"]
+        self.train_std = train_stats["std"]
 
         if results_dir:
             self.results_dir = results_dir
         else:
-            self.results_dir = join(script_dir, 'results', name)
+            self.results_dir = join(script_dir, "results", name)
         os.makedirs(self.results_dir, exist_ok=True)
 
         np.random.seed(random_seed)
 
 
     def test_model(self, bodydata):
-        '''
+        """
         test the auto-encoding errors of the model
-        '''
-        print('\n=============== Running demo: test reconstruction ===============')
+        """
+        print("\n=============== Running demo: test reconstruction ===============")
 
-        obj_dir = join(self.results_dir, 'test_reconstruction_objs_{}'.format(self.dataset))
+        obj_dir = join(self.results_dir, f"test_reconstruction_objs_{self.dataset}")
 
         vertices = bodydata.vertices_test
         condition = bodydata.cond1_test
-        if hasattr(bodydata, 'cond1_test_full'):
+        if hasattr(bodydata, "cond1_test_full"):
             pose_params_full = bodydata.cond1_test_full
         condition2 = bodydata.cond2_test
 
-        print("\nTesting on test set, {} examples...\n".format(len(vertices)))
+        print(f"\nTesting on test set, {len(vertices)} examples...\n")
 
         predictions, recon_loss, latent_loss, edge_loss = self.model.predict(data=vertices,
                                                                              cond=condition,
                                                                              cond2=condition2,
                                                                              labels=vertices,
-                                                                             phase='test')
+                                                                             phase="test")
         predictions = predictions * bodydata.std + bodydata.mean
         gt = vertices * bodydata.std + bodydata.mean
 
@@ -106,16 +113,14 @@ class demo_full(object):
         euclidean_err_std = np.std(euclidean_err)
         euclidean_err_median = np.median(euclidean_err)
 
-        test_result_str = "\nResults from {}: \n" \
-                          "L1 {:.5f}, KL {:.5f}, Edge {:.5f}\n" \
-                          "Eucledian err mean {:.5f}, std {:.5f}, median {:.5f}.\n".format(self.name,
-                                recon_loss, latent_loss, edge_loss,
-                                euclidean_err_mean, euclidean_err_std, euclidean_err_median)
+        test_result_str = f"\nResults from {self.name}: \n" \
+                          f"L1 {recon_loss:.5f}, KL {latent_loss:.5f}, Edge {edge_loss:.5f}\n" \
+                          f"Eucledian err mean {euclidean_err_mean:.5f}, std {euclidean_err_std:.5f}, median {euclidean_err_median:.5f}.\n"
         print(test_result_str)
-        with open(os.path.join(self.results_dir, 'test_results_{}.txt'.format(self.dataset)), 'a+') as fp:
+        with open(os.path.join(self.results_dir, f"test_results_{self.dataset}.txt"), "a+") as fp:
             fp.write(test_result_str)
 
-        with open(os.path.join(self.results_dir, '../all_test_results_{}.txt'.format(self.dataset)), 'a+') as fp:
+        with open(os.path.join(self.results_dir, f"../all_test_results_{self.dataset}.txt"), "a+") as fp:
             fp.write(test_result_str)
 
         # visualize / save results
@@ -132,7 +137,7 @@ class demo_full(object):
             pose_params_full = rot2pose(pose_params_full)
 
         if self.save_obj or self.vis:
-            if hasattr(bodydata, 'cond1_test_full'):
+            if hasattr(bodydata, "cond1_test_full"):
                 # only save / vis exemplars of test set, to save time and disk space
                 predictions_fullbody_sliced = predictions_fullbody[::int(len(gt_fullbody)/self.n_sample)]
                 pose_params_full_sliced = pose_params_full[::int(len(gt_fullbody)/self.n_sample)]
@@ -147,29 +152,29 @@ class demo_full(object):
                     minimal_shape_repeated = np.repeat(self.minimal_shape[np.newaxis, :], gt_fullbody.shape[0], axis=0)
 
         if self.vis:
-            if hasattr(bodydata, 'cond1_test_full'):
+            if hasattr(bodydata, "cond1_test_full"):
                 self.vis_meshviewer(predictions_fullbody_posed, gt_fullbody_posed, minimal_shape_posed, self.n_sample)
             else:
                 self.vis_meshviewer(predictions_fullbody, gt_fullbody, minimal_shape_repeated, self.n_sample)
 
 
     def sample_vary_pose(self):
-        '''
+        """
         fix clothing type, sample several poses, under each pose sample latent code N times
-        '''
+        """
         full_pose = self.pose # take the corresponding full 72-dim pose params, for later reposing
         rot = filter_cloth_pose(self.rot) # only keep pose params from clo-related joints; then take one pose instance
-        clotype = (self.clo_type_readable == 'shortlong').astype(int) # fix one clothing type
+        clotype = (self.clo_type_readable == "shortlong").astype(int) # fix one clothing type
         clotype_repeated = np.repeat(clotype[np.newaxis, :], len(rot), axis=0)
 
         # get latent embedding of the conditions
         pose_emb, clotype_emb = self.model.encode_only_condition(rot, clotype_repeated)
         clotype_emb = clotype_emb[0]
 
-        obj_dir = join(self.results_dir, 'sample_vary_pose')
+        obj_dir = join(self.results_dir, "sample_vary_pose")
 
-        print('\n=============== Running demo: fix z, clotype, change pose ===============')
-        print('\nFound {} different pose, for each we generate {} samples\n'.format(len(rot), self.n_sample))
+        print("\n=============== Running demo: fix z, clotype, change pose ===============")
+        print(f"\nFound {len(rot)} different pose, for each we generate {self.n_sample} samples\n")
 
         # sample latent space
         z_samples = np.random.normal(loc=0.0, scale=1.0, size=(self.n_sample, self.model.nz))
@@ -195,13 +200,13 @@ class demo_full(object):
                 minimal_shape_posed = self.pose_result_onepose_multisample(np.array([self.minimal_shape]), full_pose_repeated, pose_idx=idx,
                                                    save_obj=False)
                 self.vis_meshviewer(mesh1=predictions_fullbody_posed, mesh2=minimal_shape_posed, mesh3=None,
-                            n_sample=self.n_sample, titlebar='Sample vary pose')
+                            n_sample=self.n_sample, titlebar="Sample vary pose")
 
 
     def sample_vary_clotype(self, index=None):
-        '''
+        """
         fix body pose, sample 4 clothing types, under each clothing type sample latent code N times
-        '''
+        """
         full_pose = self.pose[2] # take the corresponding full 72-dim pose params, for later reposing
         full_pose_repeated = np.repeat(full_pose[np.newaxis,:], self.n_sample, axis=0)
 
@@ -213,8 +218,8 @@ class demo_full(object):
         pose_emb, clotype_emb = self.model.encode_only_condition(rot_repeated, clotype)
         pose_emb = pose_emb[0] # since it's repeated so only take one
 
-        print('\n=============== Running demo: fix z, pose, change clothing type ===============')
-        print('Found {} different clothing types, for each we generate {} samples\n'.format(len(clotype), self.n_sample))
+        print("\n=============== Running demo: fix z, pose, change clothing type ===============")
+        print(f"Found {len(clotype)} different clothing types, for each we generate {self.n_sample} samples\n")
 
         obj_dir = self.results_dir
 
@@ -247,17 +252,17 @@ class demo_full(object):
         else:
             path_prefix = ""
         predictions_fullbody_posed = self.pose_result(predictions_fullbody, full_pose_repeated,
-                                                        cloth_type='clotype_{}'.format(clotype_name),
+                                                        cloth_type=f"clotype_{clotype_name}",
                                                         save_obj=self.save_obj, obj_dir=obj_dir, path_prefix=path_prefix)
         minimal_shape_posed = self.pose_result(np.array([self.minimal_shape]), full_pose_repeated,
                                                 save_obj=False)
         if self.vis:
             self.vis_meshviewer(mesh1=predictions_fullbody_posed, mesh2=minimal_shape_posed, mesh3=None,
-                            n_sample=self.n_sample, titlebar='Sample vary clothtype, clothing type: {}'.format(clotype_name))
+                            n_sample=self.n_sample, titlebar=f"Sample vary clothtype, clothing type: {clotype_name}")
         
 
 
-    def vis_meshviewer(self, mesh1, mesh2, mesh3, n_sample, titlebar='titlebar', disp_value=False, values_to_disp=None):
+    def vis_meshviewer(self, mesh1, mesh2, mesh3, n_sample, titlebar="titlebar", disp_value=False, values_to_disp=None):
         from psbody.mesh import Mesh, MeshViewers
 
         if mesh3 is not None:
@@ -267,26 +272,26 @@ class demo_full(object):
                 viewer[0][1].static_meshes = [Mesh(mesh2[x], self.ref_mesh.f)]
                 viewer[0][2].static_meshes = [Mesh(mesh3[x], self.ref_mesh.f)]
                 if disp_value is False:
-                    print('frame {}, Press key for next'.format(x))
+                    print(f"frame {x}, Press key for next")
                 else:
-                    input('Current value: {}'.format(values_to_disp[x]))
+                    input(f"Current value: {values_to_disp[x]}")
         else:
             viewer = MeshViewers(shape=(1, 2), titlebar=titlebar)
             for x in range(n_sample):
                 viewer[0][0].static_meshes = [Mesh(mesh1[x], self.ref_mesh.f)]
                 viewer[0][1].static_meshes = [Mesh(mesh2[x], self.ref_mesh.f)]
                 if disp_value is False:
-                    print('frame {}, press key for next'.format(x))
+                    print(f"frame {x}, press key for next")
                 else:
-                    input('Current value: {}'.format(values_to_disp[x]))
+                    input(f"Current value: {values_to_disp[x]}")
 
 
     def pose_result(self, verts, pose_params, save_obj, cloth_type=None, obj_dir=None, path_prefix=""):
-        '''
+        """
         :param verts: [N, 6890, 3]
         :param pose_params: [N, 72]
-        '''
-        from psbody.mesh import Mesh, MeshViewers
+        """
+        from psbody.mesh import Mesh
 
         if verts.shape[0] != 1: # minimal shape: pose it to every pose
             assert verts.shape[0] == pose_params.shape[0] # otherwise the number of results should equal the number of pose identities
@@ -296,7 +301,7 @@ class demo_full(object):
         if save_obj:
             if not exists(obj_dir):
                 os.makedirs(obj_dir)
-            print('saving results as .obj files to {}...'.format(obj_dir))
+            print(f"saving results as .obj files to {obj_dir}...")
 
         if verts.shape[0] == 1:
             self.smpl_model.v_template[:] = torch.from_numpy(verts[0])
@@ -307,9 +312,9 @@ class demo_full(object):
                 verts_posed.append(verts_out)
                 if save_obj:
                     if cloth_type is not None:
-                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, '{}_mesh.obj').format(path_prefix, cloth_type, i))
+                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, "{}_mesh.obj").format(path_prefix, cloth_type, i))
                     else:
-                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, '{}_mesh.obj').format(path_prefix, i))
+                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, "{}_mesh.obj").format(path_prefix, i))
         else:
             for i in range(len(verts)):
                 self.smpl_model.v_template[:] = torch.from_numpy(verts[i])
@@ -319,19 +324,19 @@ class demo_full(object):
                 verts_posed.append(verts_out)
                 if save_obj:
                     if cloth_type is not None:
-                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, '{}_mesh.obj').format(path_prefix, cloth_type, i))
+                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, "{}_mesh.obj").format(path_prefix, cloth_type, i))
                     else:
-                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, '{}_mesh.obj').format(path_prefix, i))
+                        Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, "{}_mesh.obj").format(path_prefix, i))
 
         return verts_posed
 
 
     def pose_result_onepose_multisample(self, verts, pose_params, pose_idx, save_obj, obj_dir=None):
-        '''
+        """
         :param verts: [N, 6890, 3]
         :param pose_params: [N, 72]
-        '''
-        from psbody.mesh import Mesh, MeshViewers
+        """
+        from psbody.mesh import Mesh
 
         if verts.shape[0] != 1: # minimal shape: pose it to every pose
             assert verts.shape[0] == pose_params.shape[0] # otherwise the number of results should equal the number of pose identities
@@ -341,7 +346,7 @@ class demo_full(object):
         if save_obj:
             if not exists(obj_dir):
                 os.makedirs(obj_dir)
-            print('saving results as .obj files to {}...'.format(obj_dir))
+            print(f"saving results as .obj files to {obj_dir}...")
 
         if verts.shape[0] == 1:
             self.smpl_model.v_template[:] = torch.from_numpy(verts[0])
@@ -351,7 +356,7 @@ class demo_full(object):
                 verts_out = self.smpl_model().vertices.detach().cpu().numpy()
                 verts_posed.append(verts_out)
                 if save_obj:
-                    Mesh(verts_out, self.smpl_model.faces).write_obj(join(obj_dir, 'pose{}_{:0>4d}.obj').format(pose_idx, i))
+                    Mesh(verts_out, self.smpl_model.faces).write_obj(join(obj_dir, "pose{}_{:0>4d}.obj").format(pose_idx, i))
 
         else:
             for i in range(len(verts)):
@@ -361,7 +366,7 @@ class demo_full(object):
                 verts_out = self.smpl_model().vertices.detach().cpu().numpy()
                 verts_posed.append(verts_out)
                 if save_obj:
-                    Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, 'pose{}_{:0>4d}.obj').format(pose_idx, i))
+                    Mesh(verts_out.squeeze(), self.smpl_model.faces).write_obj(join(obj_dir, "pose{}_{:0>4d}.obj").format(pose_idx, i))
 
         return verts_posed
 
@@ -371,7 +376,7 @@ class demo_full(object):
         self.sample_vary_clotype()
 
 
-class demo_simple(object):
+class demo_simple:
     def __init__(self, model, name, random_seed=123):
         self.name = name
         self.model = model
@@ -380,29 +385,29 @@ class demo_simple(object):
 
         import trimesh
 
-        self.clo_type_readable = np.array(['shortlong', 'shortshort', 'longshort', 'longlong'])
+        self.clo_type_readable = np.array(["shortlong", "shortshort", "longshort", "longlong"])
 
         script_dir = os.path.dirname(os.path.realpath(__file__))
-        self.clothing_verts_idx = np.load(join(script_dir, 'data', 'clothing_verts_idx.npy'))
-        self.ref_mesh = trimesh.load(join(script_dir, 'data', 'template_mesh.obj'), process=False)
+        self.clothing_verts_idx = np.load(join(script_dir, "data", "clothing_verts_idx.npy"))
+        self.ref_mesh = trimesh.load(join(script_dir, "data", "template_mesh.obj"), process=False)
         self.minimal_shape = self.ref_mesh.vertices
 
-        self.rot = np.load(join(script_dir, 'data', 'demo_data', 'demo_pose_params.npz'))['rot']
-        self.pose = np.load(join(script_dir, 'data', 'demo_data', 'demo_pose_params.npz'))['pose']
+        self.rot = np.load(join(script_dir, "data", "demo_data", "demo_pose_params.npz"))["rot"]
+        self.pose = np.load(join(script_dir, "data", "demo_data", "demo_pose_params.npz"))["pose"]
 
-        train_stats = np.load(join(script_dir, 'data', 'demo_data', 'trainset_stats.npz'))
-        self.train_mean = train_stats['mean']
-        self.train_std = train_stats['std']
+        train_stats = np.load(join(script_dir, "data", "demo_data", "trainset_stats.npz"))
+        self.train_mean = train_stats["mean"]
+        self.train_std = train_stats["std"]
 
-        self.results_dir = join(script_dir, 'results', 'demo_results')
+        self.results_dir = join(script_dir, "results", "demo_results")
         os.makedirs(self.results_dir, exist_ok=True)
 
         np.random.seed(random_seed)
 
     def sample_vary_clotype(self):
-        '''
+        """
         fix body pose, sample 4 clothing types, under each clothing type sample latent code N times
-        '''
+        """
         clotype = np.array([[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1]]) # one-hot encoding of 4 clothing types
         rot = filter_cloth_pose(self.rot)[0]
         rot_repeated = np.repeat(rot[np.newaxis,:], len(clotype), axis=0)
@@ -411,8 +416,8 @@ class demo_simple(object):
         pose_emb, clotype_emb = self.model.encode_only_condition(rot_repeated, clotype)
         pose_emb = pose_emb[0]
 
-        print('\n=============== Running demo: fix z, pose, change clothing type ===============')
-        print('Found {} different clothing types, for each we generate {} samples\n'.format(len(clotype), self.n_sample))
+        print("\n=============== Running demo: fix z, pose, change clothing type ===============")
+        print(f"Found {len(clotype)} different clothing types, for each we generate {self.n_sample} samples\n")
 
         # sample z from latent space
         z_samples = np.random.normal(loc=0.0, scale=1.0, size=(self.n_sample, self.model.nz))
@@ -439,4 +444,4 @@ class demo_simple(object):
 
             for j in range(self.n_sample):
                 mm = trimesh.Trimesh(vertices=predictions_fullbody[j], faces=self.ref_mesh.faces)
-                mm.export(join(self.results_dir, '{}_{:0>4d}.obj').format(clotype_name, j))
+                mm.export(join(self.results_dir, "{}_{:0>4d}.obj").format(clotype_name, j))

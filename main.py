@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import copy
-from demos import demo_full
+from demos_star import demo_full
 from lib import models, mesh_sampling
 from lib.load_data import BodyData, load_graph_mtx
 from config_parser import parse_config

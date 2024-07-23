@@ -6,9 +6,9 @@ from lib.mesh_sampling import laplacian
 
 def load_graph_mtx(project_dir, load_for_demo=False):
     print('loading pre-saved transform matrices...')
-    A_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/A.npy'), encoding='latin1'))
-    D_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/D.npy'), encoding='latin1'))
-    U_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/U.npy'), encoding='latin1'))
+    A_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/A.npy'), encoding='latin1', allow_pickle=True))
+    D_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/D.npy'), encoding='latin1', allow_pickle=True))
+    U_ds2 = list(np.load(os.path.join(project_dir, 'data', 'transform_matrices/ds2/U.npy'), encoding='latin1', allow_pickle=True))
 
     A_ds2 = list(map(lambda x: x.astype('float32'), A_ds2))
     D_ds2 = list(map(lambda x: x.astype('float32'), D_ds2))

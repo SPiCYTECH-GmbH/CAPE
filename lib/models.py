@@ -18,7 +18,7 @@ class base_model(object):
                  optimizer='sgd', decay_steps=None, momentum=0.9, cond_dim=0, nz_cond=0,
                  regularization=0, batch_size=32, seed=123,
                  lambda_recon=1.0, lambda_edge=0.0, lambda_latent=1e-3,
-                 restart=False, name='', loss_mask=None):
+                 restart=False, name='', loss_mask=None, mesh_path=None, **kwargs):
         try:
             tf.random.set_random_seed(seed)
         except:
@@ -41,7 +41,14 @@ class base_model(object):
         self.plot_latent = False
 
         self.script_path = os.path.dirname(os.path.realpath(__file__))
-        self.verts_ref = trimesh.load(os.path.join(self.script_path, '..', 'data/template_mesh.obj'), process=False).vertices
+        print("---------------------------------------------------------")
+        print("base_model mesh_path:", mesh_path)
+        print("---------------------------------------------------------")
+        
+        if mesh_path:
+            self.verts_ref = trimesh.load(mesh_path, process=False).vertices
+        else:
+            self.verts_ref = trimesh.load(os.path.join(self.script_path, '..', 'data/template_mesh.obj'), process=False).vertices
         self.vpe = np.load(os.path.join(self.script_path, '..','data/edges_smpl.npy')) # vertex per edge
 
         if loss_mask == 'binary':
